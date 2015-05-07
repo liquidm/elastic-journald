@@ -1,0 +1,4 @@
+github.com/remerge/rex #16624e14d014ba4ee0adce3b707e85a4bb8b1576
+github.com/eapache/go-resiliency #ed0319b32e66e3295db52695ba3ee493e823fbfe
+github.com/mailgun/manners #38e66a3e3e920713163484c7ab57ffc39c35e257 !https://github.com/remerge/manners
+github.com/rcrowley/go-metrics #ace6b1c5df1245cb6a6dc9852abaf76c3ae99606 !https://github.com/remerge/go-metrics
