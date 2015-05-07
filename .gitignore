@@ -3,4 +3,5 @@
 .DS_Store
 .args
 .vendor/
-cache/
+.elastic_journal_cursor
+elastic-journald

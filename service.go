@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 	"unsafe"
-
-	"github.com/remerge/rex"
 )
 
 // #include <stdio.h>
@@ -19,27 +17,23 @@ import (
 import "C"
 
 type Config struct {
-	rex.Config
 }
 
 type Service struct {
-	rex.Service
 	Config  *Config
 	Journal *C.sd_journal
 	Cursor  string
 }
 
 func NewService() *Service {
-	config := &Config{Config: *rex.NewConfig("elastic_journald", 3089)}
+	config := &Config{}
 
 	service := &Service{Config: config}
-	service.Service.BaseConfig = &config.Config
 
 	return service
 }
 
 func (s *Service) Run() {
-	s.Service.Run()
 	s.InitJournal()
 	s.ProcessStream()
 }
@@ -48,12 +42,12 @@ func (s *Service) ProcessStream() {
 	for {
 		r := C.sd_journal_next(s.Journal)
 		if r < 0 {
-			rex.MayPanicNew("failed to iterate to next entry: %s", C.strerror(-r))
+			panic(fmt.Sprintf("failed to iterate to next entry: %s", C.strerror(-r)))
 		}
 		if r == 0 {
 			r = C.sd_journal_wait(s.Journal, 1000000)
 			if r < 0 {
-				rex.MayPanicNew("failed to wait for changes: %s", C.strerror(-r))
+				panic(fmt.Sprintf("failed to wait for changes: %s", C.strerror(-r)))
 			}
 			continue
 		}
@@ -65,20 +59,20 @@ func (s *Service) ProcessEntry() {
 	var realtime C.uint64_t
 	r := C.sd_journal_get_realtime_usec(s.Journal, &realtime)
 	if r < 0 {
-		rex.MayPanicNew("failed to get realtime timestamp: %s", C.strerror(-r))
+		panic(fmt.Sprintf("failed to get realtime timestamp: %s", C.strerror(-r)))
 	}
 
 	var monotonic C.uint64_t
 	var boot_id C.sd_id128_t
 	r = C.sd_journal_get_monotonic_usec(s.Journal, &monotonic, &boot_id)
 	if r < 0 {
-		rex.MayPanicNew("failed to get monotonic timestamp: %s", C.strerror(-r))
+		panic(fmt.Sprintf("failed to get monotonic timestamp: %s", C.strerror(-r)))
 	}
 
 	var cursor *C.char
 	r = C.sd_journal_get_cursor(s.Journal, &cursor)
 	if r < 0 {
-		rex.MayPanicNew("failed to get cursor: %s", C.strerror(-r))
+		panic(fmt.Sprintf("failed to get cursor: %s", C.strerror(-r)))
 	}
 
 	var sid = "1234567890abcdefghijklmnopqrstuvwxyz" // 33+ chars
@@ -88,6 +82,7 @@ func (s *Service) ProcessEntry() {
 		C.GoString(C.sd_id128_to_string(boot_id, C.CString(sid))),
 		s.ProcessEntryFields())
 
+	fmt.Println(message)
 	ioutil.WriteFile(".elastic_journal_cursor", []byte(C.GoString(cursor)), 0644)
 }
 
@@ -129,21 +124,17 @@ func (s *Service) ProcessEntryFields() string {
 			separator = true
 			continue
 		} else {
-			rex.MayPanicNew("unsupported multiple field: %s", parts[0])
+			panic(fmt.Sprintf("unsupported multiple field: %s", parts[0]))
 		}
 	}
 
 	return buf.String()
 }
 
-func (s *Service) Shutdown() {
-	s.Service.Shutdown()
-}
-
 func (s *Service) InitJournal() {
 	r := C.sd_journal_open(&s.Journal, C.SD_JOURNAL_LOCAL_ONLY)
 	if r < 0 {
-		rex.MayPanicNew("failed to open journal: %s", C.strerror(-r))
+		panic(fmt.Sprintf("failed to open journal: %s", C.strerror(-r)))
 	}
 
 	bytes, err := ioutil.ReadFile(".elastic_journal_cursor")
@@ -154,11 +145,11 @@ func (s *Service) InitJournal() {
 	if s.Cursor != "" {
 		r = C.sd_journal_seek_cursor(s.Journal, C.CString(s.Cursor))
 		if r < 0 {
-			rex.MayPanicNew("failed to seek journal: %s", C.strerror(-r))
+			panic(fmt.Sprintf("failed to seek journal: %s", C.strerror(-r)))
 		}
 		r = C.sd_journal_next_skip(s.Journal, 1)
 		if r < 0 {
-			rex.MayPanicNew("failed to skip current journal entry: %s", C.strerror(-r))
+			panic(fmt.Sprintf("failed to skip current journal entry: %s", C.strerror(-r)))
 		}
 	}
 }
