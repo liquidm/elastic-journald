@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os/exec"
 	"strings"
 	"time"
 	"unsafe"
@@ -35,10 +36,10 @@ func NewService() *Service {
 
 func (s *Service) Run() {
 	s.InitJournal()
-	s.ProcessStream()
+	s.ProcessStream(GetFQDN())
 }
 
-func (s *Service) ProcessStream() {
+func (s *Service) ProcessStream(hostname *string) {
 	for {
 		r := C.sd_journal_next(s.Journal)
 		if r < 0 {
@@ -51,22 +52,15 @@ func (s *Service) ProcessStream() {
 			}
 			continue
 		}
-		s.ProcessEntry()
+		s.ProcessEntry(hostname)
 	}
 }
 
-func (s *Service) ProcessEntry() {
+func (s *Service) ProcessEntry(hostname *string) {
 	var realtime C.uint64_t
 	r := C.sd_journal_get_realtime_usec(s.Journal, &realtime)
 	if r < 0 {
 		panic(fmt.Sprintf("failed to get realtime timestamp: %s", C.strerror(-r)))
-	}
-
-	var monotonic C.uint64_t
-	var boot_id C.sd_id128_t
-	r = C.sd_journal_get_monotonic_usec(s.Journal, &monotonic, &boot_id)
-	if r < 0 {
-		panic(fmt.Sprintf("failed to get monotonic timestamp: %s", C.strerror(-r)))
 	}
 
 	var cursor *C.char
@@ -75,60 +69,43 @@ func (s *Service) ProcessEntry() {
 		panic(fmt.Sprintf("failed to get cursor: %s", C.strerror(-r)))
 	}
 
-	var sid = "1234567890abcdefghijklmnopqrstuvwxyz" // 33+ chars
-	message := fmt.Sprintf(`{"ts":"%s","__CURSOR":"%s","__MONOTONIC_TIMESTAMP":"%d","_BOOT_ID":"%s"%s}`,
-		time.Unix(int64(realtime/1000000), int64(realtime%1000000)).UTC().Format("2006-01-02T15:04:05Z"),
-		C.GoString(cursor), monotonic,
-		C.GoString(C.sd_id128_to_string(boot_id, C.CString(sid))),
-		s.ProcessEntryFields())
+	row := make(map[string]interface{})
 
-	fmt.Println(message)
+	row["ts"] = time.Unix(int64(realtime/1000000), int64(realtime%1000000)).UTC().Format("2006-01-02T15:04:05Z")
+	row["host"] = hostname
+	s.ProcessEntryFields(row)
+
+	message, _ := json.Marshal(row)
+	fmt.Println(string(message))
 	ioutil.WriteFile(".elastic_journal_cursor", []byte(C.GoString(cursor)), 0644)
 }
 
-func (s *Service) ProcessEntryFields() string {
-	var counts map[string]int = make(map[string]int)
+func (s *Service) ProcessEntryFields(row map[string]interface{}) {
 	var length C.size_t
 	var cData *C.char
 
 	for C.sd_journal_restart_data(s.Journal); C.sd_journal_enumerate_data(s.Journal, (*unsafe.Pointer)(unsafe.Pointer(&cData)), &length) > 0; {
 		data := C.GoString(cData)
-		parts := strings.Split(data, "=")
-		counts[parts[0]] += 1
-	}
 
-	separator := true
-	var buf bytes.Buffer
-
-	for C.sd_journal_restart_data(s.Journal); C.sd_journal_enumerate_data(s.Journal, (*unsafe.Pointer)(unsafe.Pointer(&cData)), &length) > 0; {
-		data := C.GoString(cData)
 		parts := strings.SplitN(data, "=", 2)
 
-		if parts[0] == "_BOOT_ID" {
-			continue
-		}
+		key := strings.ToLower(parts[0])
+		value := parts[1]
 
-		if separator {
-			buf.WriteString(", ")
-		}
-
-		count := counts[parts[0]]
-
-		if count == 0 {
-			separator = false
+		switch key {
+		case "_hostname":
+		case "_transport":
+		case "_cap_effective":
+		case "syslog_facility":
+		case "_cmdline":
+		case "_systemd_cgroup":
+		case "_systemd_slice":
+		case "_exe":
 			continue
-		} else if count == 1 {
-			key, _ := json.Marshal(parts[0])
-			value, _ := json.Marshal(parts[1])
-			buf.WriteString(fmt.Sprintf("%s:%s", key, value))
-			separator = true
-			continue
-		} else {
-			panic(fmt.Sprintf("unsupported multiple field: %s", parts[0]))
+		default:
+			row[strings.TrimPrefix(key, "_")] = value
 		}
 	}
-
-	return buf.String()
 }
 
 func (s *Service) InitJournal() {
@@ -152,4 +129,16 @@ func (s *Service) InitJournal() {
 			panic(fmt.Sprintf("failed to skip current journal entry: %s", C.strerror(-r)))
 		}
 	}
+}
+
+func GetFQDN() *string {
+	cmd := exec.Command("hostname", "-f")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return nil
+	}
+	fqdn := string(bytes.TrimSpace(out.Bytes()))
+	return &fqdn
 }
