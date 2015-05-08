@@ -1,12 +1,13 @@
 package main
 
 import (
-	"fmt"
+	"flag"
+
 	e2j "github.com/liquidm/elastic_journald"
 )
 
 func main() {
-	fmt.Println("Hello World")
+	flag.Parse()
 	service := e2j.NewService()
 	service.Run()
 }

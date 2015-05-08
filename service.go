@@ -3,12 +3,15 @@ package elastic_journald
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os/exec"
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/mattbaird/elastigo/lib"
 )
 
 // #include <stdio.h>
@@ -18,23 +21,33 @@ import (
 import "C"
 
 type Config struct {
+	Hosts       elasticHostsType
+	IndexPrefix string
 }
 
 type Service struct {
 	Config  *Config
 	Journal *C.sd_journal
 	Cursor  string
+	Elastic *elastigo.Conn
 }
 
 func NewService() *Service {
-	config := &Config{}
+	config := &Config{
+		Hosts:       elasticHosts,
+		IndexPrefix: *elasticPrefix,
+	}
 
-	service := &Service{Config: config}
-
+	service := &Service{
+		Config:  config,
+		Elastic: elastigo.NewConn(),
+	}
 	return service
 }
 
 func (s *Service) Run() {
+	s.Elastic.SetHosts(s.Config.Hosts)
+
 	s.InitJournal()
 	s.ProcessStream(GetFQDN())
 }
@@ -71,13 +84,22 @@ func (s *Service) ProcessEntry(hostname *string) {
 
 	row := make(map[string]interface{})
 
-	row["ts"] = time.Unix(int64(realtime/1000000), int64(realtime%1000000)).UTC().Format("2006-01-02T15:04:05Z")
+	timestamp := time.Unix(int64(realtime/1000000), int64(realtime%1000000)).UTC()
+
+	row["ts"] = timestamp.Format("2006-01-02T15:04:05Z")
 	row["host"] = hostname
 	s.ProcessEntryFields(row)
 
 	message, _ := json.Marshal(row)
-	fmt.Println(string(message))
-	ioutil.WriteFile(".elastic_journal_cursor", []byte(C.GoString(cursor)), 0644)
+	indexName := fmt.Sprintf("%v-%v", s.Config.IndexPrefix, timestamp.Format("2006-01-02"))
+	cursorId := C.GoString(cursor)
+
+	_, err := s.Elastic.Index(indexName, "journal", cursorId, nil, string(message))
+	if err != nil {
+		panic(err)
+	} else {
+		ioutil.WriteFile(".elastic_journal_cursor", []byte(C.GoString(cursor)), 0644)
+	}
 }
 
 func (s *Service) ProcessEntryFields(row map[string]interface{}) {
@@ -93,14 +115,16 @@ func (s *Service) ProcessEntryFields(row map[string]interface{}) {
 		value := parts[1]
 
 		switch key {
-		case "_hostname":
-		case "_transport":
+		// don't index bloat
 		case "_cap_effective":
-		case "syslog_facility":
 		case "_cmdline":
+		case "_exe":
+		case "_hostname":
 		case "_systemd_cgroup":
 		case "_systemd_slice":
-		case "_exe":
+		case "_transport":
+		case "syslog_facility":
+		case "syslog_identifier":
 			continue
 		default:
 			row[strings.TrimPrefix(key, "_")] = value
@@ -141,4 +165,24 @@ func GetFQDN() *string {
 	}
 	fqdn := string(bytes.TrimSpace(out.Bytes()))
 	return &fqdn
+}
+
+type elasticHostsType []string
+
+func (e *elasticHostsType) String() string {
+	return strings.Join(*e, ",")
+}
+
+func (e *elasticHostsType) Set(value string) error {
+	for _, host := range strings.Split(value, ",") {
+		*e = append(*e, host)
+	}
+	return nil
+}
+
+var elasticHosts elasticHostsType
+var elasticPrefix = flag.String("prefix", "journald", "The index prefix to use")
+
+func init() {
+	flag.Var(&elasticHosts, "hosts", "comma-separated list of elastic (target) hosts")
 }
