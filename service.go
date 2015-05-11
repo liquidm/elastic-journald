@@ -65,7 +65,7 @@ func NewService() *Service {
 			}
 
 			lastStoredCursor := response.Items[len(response.Items)-1].Index.Id
-			ioutil.WriteFile(".elastic_journal_cursor", []byte(lastStoredCursor), 0644)
+			ioutil.WriteFile(*elasticCursorFile, []byte(lastStoredCursor), 0644)
 		}
 		return err
 	}
@@ -176,7 +176,7 @@ func (s *Service) InitJournal() {
 		panic(fmt.Sprintf("failed to open journal: %s", C.strerror(-r)))
 	}
 
-	bytes, err := ioutil.ReadFile(".elastic_journal_cursor")
+	bytes, err := ioutil.ReadFile(*elasticCursorFile)
 	if err == nil {
 		s.Cursor = string(bytes)
 	}
@@ -218,6 +218,7 @@ func (e *elasticHostsType) Set(value string) error {
 	return nil
 }
 
+var elasticCursorFile = flag.String("cursor", ".elastic_journal_cursor", "The file to keep cursor state between runs")
 var elasticHosts elasticHostsType
 var elasticPrefix = flag.String("prefix", "journald", "The index prefix to use")
 
