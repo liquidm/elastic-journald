@@ -42,7 +42,7 @@ func NewService() *Service {
 	elastic := elastigo.NewConn()
 	indexer := elastic.NewBulkIndexerErrors(3, 10)
 	indexer.Sender = func(buf *bytes.Buffer) error {
-		// fmt.Printf("Bulk Sending %v\n", indexer.PendingDocuments())
+		fmt.Printf("Sending %v entries\n", indexer.PendingDocuments())
 		respJson, err := elastic.DoCommand("POST", "/_bulk", nil, buf)
 		if err != nil {
 			// TODO
