@@ -42,7 +42,6 @@ func NewService() *Service {
 	elastic := elastigo.NewConn()
 	indexer := elastic.NewBulkIndexerErrors(3, 10)
 	indexer.Sender = func(buf *bytes.Buffer) error {
-		fmt.Printf("Sending %v entries\n", indexer.PendingDocuments())
 		respJson, err := elastic.DoCommand("POST", "/_bulk", nil, buf)
 		if err != nil {
 			// TODO
@@ -63,9 +62,16 @@ func NewService() *Service {
 				// TODO
 				panic(jsonErr)
 			}
+			if response.Errors {
+				// TODO
+				panic("elasticsearch reported errors on intake")
+			}
 
-			lastStoredCursor := response.Items[len(response.Items)-1].Index.Id
+			messagesStored := len(response.Items)
+			lastStoredCursor := response.Items[messagesStored-1].Index.Id
 			ioutil.WriteFile(*elasticCursorFile, []byte(lastStoredCursor), 0644)
+
+			fmt.Printf("Sent %v entries\n", messagesStored)
 		}
 		return err
 	}
