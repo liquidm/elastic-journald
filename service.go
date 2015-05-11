@@ -71,7 +71,8 @@ func NewService() *Service {
 			lastStoredCursor := response.Items[messagesStored-1].Index.Id
 			ioutil.WriteFile(*elasticCursorFile, []byte(lastStoredCursor), 0644)
 
-			fmt.Printf("Sent %v entries\n", messagesStored)
+			// this will cause a busy loop, don't do it
+			// fmt.Printf("Sent %v entries\n", messagesStored)
 		}
 		return err
 	}
