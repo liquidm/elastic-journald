@@ -30,6 +30,7 @@ type Service struct {
 	Journal *C.sd_journal
 	Cursor  string
 	Elastic *elastigo.Conn
+	Indexer *elastigo.BulkIndexer
 }
 
 func NewService() *Service {
@@ -38,9 +39,41 @@ func NewService() *Service {
 		IndexPrefix: *elasticPrefix,
 	}
 
+	elastic := elastigo.NewConn()
+	indexer := elastic.NewBulkIndexerErrors(3, 10)
+	indexer.Sender = func(buf *bytes.Buffer) error {
+		// fmt.Printf("Bulk Sending %v\n", indexer.PendingDocuments())
+		respJson, err := elastic.DoCommand("POST", "/_bulk", nil, buf)
+		if err != nil {
+			// TODO
+			panic(fmt.Sprintf("Bulk error: \n%v", err))
+		} else {
+			response := struct {
+				Took   int64 `json:"took"`
+				Errors bool  `json:"errors"`
+				Items  []struct {
+					Index struct {
+						Id string `json:"_id"`
+					} `json:"index"`
+				} `json:"items"`
+			}{}
+
+			jsonErr := json.Unmarshal(respJson, &response)
+			if jsonErr != nil {
+				// TODO
+				panic(jsonErr)
+			}
+
+			lastStoredCursor := response.Items[len(response.Items)-1].Index.Id
+			ioutil.WriteFile(".elastic_journal_cursor", []byte(lastStoredCursor), 0644)
+		}
+		return err
+	}
+
 	service := &Service{
 		Config:  config,
-		Elastic: elastigo.NewConn(),
+		Elastic: elastic,
+		Indexer: indexer,
 	}
 	return service
 }
@@ -53,6 +86,9 @@ func (s *Service) Run() {
 }
 
 func (s *Service) ProcessStream(hostname *string) {
+	s.Indexer.Start()
+	defer s.Indexer.Stop()
+
 	for {
 		r := C.sd_journal_next(s.Journal)
 		if r < 0 {
@@ -94,12 +130,14 @@ func (s *Service) ProcessEntry(hostname *string) {
 	indexName := fmt.Sprintf("%v-%v", s.Config.IndexPrefix, timestamp.Format("2006-01-02"))
 	cursorId := C.GoString(cursor)
 
-	_, err := s.Elastic.Index(indexName, "journal", cursorId, nil, string(message))
-	if err != nil {
-		panic(err)
-	} else {
-		ioutil.WriteFile(".elastic_journal_cursor", []byte(C.GoString(cursor)), 0644)
-	}
+	s.Indexer.Index(
+		indexName,       // index
+		"journal",       // type
+		cursorId,        // id
+		"",              // ttl
+		nil,             // date
+		string(message), // content
+		false)           // immediate index refresh
 }
 
 func (s *Service) ProcessEntryFields(row map[string]interface{}) {
