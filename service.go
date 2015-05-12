@@ -67,7 +67,7 @@ func NewService() *Service {
 			}
 			if response.Errors {
 				// TODO
-				fmt.Println(respJson)
+				fmt.Println(string(respJson))
 				panic("elasticsearch reported errors on intake")
 			}
 
