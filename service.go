@@ -42,6 +42,8 @@ func NewService() *Service {
 	elastic := elastigo.NewConn()
 	indexer := elastic.NewBulkIndexerErrors(2, 30)
 	indexer.BufferDelayMax = time.Duration(30) * time.Second
+	indexer.BulkMaxDocs = 1000
+	indexer.BulkMaxBuffer = 65536
 	indexer.Sender = func(buf *bytes.Buffer) error {
 		respJson, err := elastic.DoCommand("POST", "/_bulk", nil, buf)
 		if err != nil {
