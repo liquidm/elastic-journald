@@ -40,7 +40,8 @@ func NewService() *Service {
 	}
 
 	elastic := elastigo.NewConn()
-	indexer := elastic.NewBulkIndexerErrors(3, 10)
+	indexer := elastic.NewBulkIndexerErrors(2, 30)
+	indexer.BufferDelayMax = time.Duration(30) * time.Second
 	indexer.Sender = func(buf *bytes.Buffer) error {
 		respJson, err := elastic.DoCommand("POST", "/_bulk", nil, buf)
 		if err != nil {
@@ -64,6 +65,7 @@ func NewService() *Service {
 			}
 			if response.Errors {
 				// TODO
+				fmt.Println(respJson)
 				panic("elasticsearch reported errors on intake")
 			}
 
