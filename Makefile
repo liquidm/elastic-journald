@@ -37,7 +37,7 @@ fmt:
 	$(GOFMT) $(GOFILES)
 
 dep:
-	go get github.com/nitrous-io/goop
+	go get github.com/liquidm/goop
 	goop install
 	mkdir -p $(dir $(TOP)/.vendor/src/$(PACKAGE))
 	ln -nfs $(TOP) $(TOP)/.vendor/src/$(PACKAGE)
