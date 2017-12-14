@@ -11,7 +11,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/mattbaird/elastigo/lib"
+	"github.com/liquidm/elastigo/lib"
 )
 
 // #include <stdio.h>
