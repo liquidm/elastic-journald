@@ -11,7 +11,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/mattbaird/elastigo/lib"
+	"github.com/liquidm/elastigo/lib"
 )
 
 // #include <stdio.h>
@@ -145,10 +145,11 @@ func (s *Service) ProcessEntry(hostname *string) {
 		indexName,       // index
 		"journal",       // type
 		cursorId,        // id
+		"",              // parent
 		"",              // ttl
 		nil,             // date
 		string(message), // content
-		false)           // immediate index refresh
+	)
 }
 
 func (s *Service) ProcessEntryFields(row map[string]interface{}) {
