@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 	"unsafe"
@@ -31,6 +32,8 @@ type Service struct {
 	Cursor  string
 	Elastic *elastigo.Conn
 	Indexer *elastigo.BulkIndexer
+
+	messageFieldsRe *regexp.Regexp
 }
 
 func NewService() *Service {
@@ -85,6 +88,8 @@ func NewService() *Service {
 		Config:  config,
 		Elastic: elastic,
 		Indexer: indexer,
+
+		messageFieldsRe: regexp.MustCompile("indexed:([[:graph:]]+)=([[:graph:]]+)"),
 	}
 	return service
 }
@@ -176,6 +181,12 @@ func (s *Service) ProcessEntryFields(row map[string]interface{}) {
 		case "syslog_facility":
 		case "syslog_identifier":
 			continue
+		case "message":
+			row[key] = value
+			match := s.messageFieldsRe.FindAllStringSubmatch(value, -1)
+			for _, m := range match {
+				row[m[1]] = m[2]
+			}
 		default:
 			row[strings.TrimPrefix(key, "_")] = value
 		}
