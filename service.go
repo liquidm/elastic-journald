@@ -89,7 +89,7 @@ func NewService() *Service {
 		Elastic: elastic,
 		Indexer: indexer,
 
-		messageFieldsRe: regexp.MustCompile("indexed:([[:graph:]]+)=([[:graph:]]+)"),
+		messageFieldsRe: regexp.MustCompile("indexed:([[:word:]]+)=([[:graph:]]+)"),
 	}
 	return service
 }
