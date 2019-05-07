@@ -158,11 +158,11 @@ func (s *Service) ProcessEntry(hostname *string) {
 }
 
 func (s *Service) ProcessEntryFields(row map[string]interface{}) {
-	var length C.size_t
+	var length C.ulong
 	var cData *C.char
 
 	for C.sd_journal_restart_data(s.Journal); C.sd_journal_enumerate_data(s.Journal, (*unsafe.Pointer)(unsafe.Pointer(&cData)), &length) > 0; {
-		data := C.GoString(cData)
+		data := C.GoStringN(cData, C.int(length))
 
 		parts := strings.SplitN(data, "=", 2)
 
