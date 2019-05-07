@@ -158,7 +158,7 @@ func (s *Service) ProcessEntry(hostname *string) {
 }
 
 func (s *Service) ProcessEntryFields(row map[string]interface{}) {
-	var length C.ulong
+	var length C.size_t
 	var cData *C.char
 
 	for C.sd_journal_restart_data(s.Journal); C.sd_journal_enumerate_data(s.Journal, (*unsafe.Pointer)(unsafe.Pointer(&cData)), &length) > 0; {
